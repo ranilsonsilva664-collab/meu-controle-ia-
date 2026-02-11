@@ -1,0 +1,7 @@
+{
+  "name": "Meu Controle IA",
+  "description": "Suas finanças no controle certo",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

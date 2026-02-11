@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meu Controle IA $ - Suas finanças no controle certo</title>
+    <script>
+        // Debugging global errors
+        window.onerror = function (msg, url, line, col, error) {
+            var div = document.createElement('div');
+            div.style.cssText = 'position:fixed;top:0;left:0;z-index:9999;background:white;color:red;padding:20px;border:5px solid red;font-family:monospace;width:100%;box-sizing:border-box;';
+            div.innerHTML = '<h3>Erro Detectado:</h3>' +
+                '<p><b>Mensagem:</b> ' + msg + '</p>' +
+                '<p><b>Linha:</b> ' + line + '</p>' +
+                '<p><b>Arquivo:</b> ' + url + '</p>' +
+                '<p><b>Stack:</b> ' + (error ? error.stack : 'N/A') + '</p>';
+            document.body.appendChild(div);
+            return false;
+        };
+        // Catch resource loading errors (like failed imports)
+        window.addEventListener('error', function (event) {
+            if (event.target && (event.target.tagName === 'SCRIPT' || event.target.tagName === 'LINK')) {
+                var div = document.createElement('div');
+                div.style.cssText = 'position:fixed;top:100px;left:0;z-index:9999;background:orange;color:black;padding:20px;border:5px solid orange;font-family:monospace;width:100%;box-sizing:border-box;';
+                div.innerHTML = '<h3>Erro de Carregamento de Recurso:</h3>' +
+                    '<p><b>Falha ao carregar:</b> ' + (event.target.src || event.target.href) + '</p>';
+                document.body.appendChild(div);
+            }
+        }, true);
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        window.addEventListener('load', function () {
+            if (typeof tailwind !== 'undefined') {
+                tailwind.config = {
+                    darkMode: 'class',
+                    theme: {
+                        extend: {
+                            fontFamily: {
+                                sans: ['Inter', 'sans-serif'],
+                            },
+                        },
+                    },
+                };
+            } else {
+                console.error('Tailwind fails to load');
+            }
+        });
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        * {
+            transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+
+        .dark ::-webkit-scrollbar-thumb {
+            background: #334155;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-50 text-slate-900 dark:bg-black dark:text-slate-100">
+    <div id="root">
+        <div
+            style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;background:#059669;color:white;">
+            <h2>Carregando aplicativo...</h2>
+        </div>
+    </div>
+    <script type="module" src="./index.tsx"></script>
+</body>
+
+</html>
