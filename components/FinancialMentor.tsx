@@ -53,7 +53,16 @@ const FinancialMentor: React.FC<FinancialMentorProps> = ({ transactions, balance
     setLoading(true);
     setError(null);
     try {
-      const data = await getMentorMentorship(transactions, balance, userName, goal);
+      // Timeout de 15 segundos para evitar travamento eterno
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("O Mentor demorou muito para responder. Tente novamente.")), 15000)
+      );
+
+      const data = await Promise.race([
+        getMentorMentorship(transactions, balance, userName, goal),
+        timeoutPromise
+      ]) as MentorFeedback;
+
       setMentorship(data);
       const cacheKey = `mentor_cache_${transactions.length}_${balance.toFixed(0)}_${goal}`;
       localStorage.setItem(cacheKey, JSON.stringify({ data, timestamp: Date.now() }));

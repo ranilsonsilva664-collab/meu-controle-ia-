@@ -11,7 +11,7 @@ const getAI = () => {
 };
 
 const handleAIError = (err: any) => {
-  console.error("AI Error:", err);
+  console.error("AI Error Details:", JSON.stringify(err, null, 2));
   if (err.message?.includes("429") || err.message?.includes("RESOURCE_EXHAUSTED")) {
     throw new Error("LIMITE_EXCEDIDO: Você atingiu o limite de uso gratuito do Google por agora. Aguarde cerca de 1 minuto.");
   }
@@ -24,7 +24,7 @@ const handleAIError = (err: any) => {
 export const processReceiptImage = async (base64Image: string): Promise<Partial<Transaction>> => {
   try {
     const ai = getAI();
-    const model = "gemini-3-flash-preview";
+    const model = "gemini-2.0-flash";
     const response = await ai.models.generateContent({
       model,
       contents: [{
@@ -51,7 +51,8 @@ export const processReceiptImage = async (base64Image: string): Promise<Partial<
       },
     });
 
-    const data = JSON.parse(response.text?.trim() || "{}");
+    const responseText = typeof response.text === 'function' ? response.text() : response.text;
+    const data = JSON.parse(responseText?.trim() || "{}");
     return {
       ...data,
       date: data.date ? new Date(data.date).toISOString() : new Date().toISOString(),
@@ -64,7 +65,7 @@ export const processReceiptImage = async (base64Image: string): Promise<Partial<
 export const getMentorMentorship = async (transactions: Transaction[], balance: number, userName: string, goal: number = 100000): Promise<MentorFeedback> => {
   try {
     const ai = getAI();
-    const model = "gemini-3-flash-preview";
+    const model = "gemini-2.0-flash";
     const prompt = `
       Você é o Mentor Financeiro. Seu tom é motivador, inteligente e focado em estratégia de longo prazo.
       Usuário: ${userName}
@@ -107,7 +108,8 @@ export const getMentorMentorship = async (transactions: Transaction[], balance: 
       }
     });
 
-    return JSON.parse(response.text?.trim() || "{}");
+    const responseText = typeof response.text === 'function' ? response.text() : response.text;
+    return JSON.parse(responseText?.trim() || "{}");
   } catch (err) {
     return handleAIError(err);
   }
@@ -116,7 +118,7 @@ export const getMentorMentorship = async (transactions: Transaction[], balance: 
 export const simulateDecision = async (query: string, balance: number, goal: number = 100000): Promise<{ text: string; sources?: any[] }> => {
   try {
     const ai = getAI();
-    const model = "gemini-3-flash-preview";
+    const model = "gemini-2.0-flash";
     const prompt = `Você é o Oráculo Financeiro do projeto Rumo à Meta. O usuário perguntou: "${query}". 
     O saldo atual dele é R$ ${balance.toFixed(2)} e a meta dele é chegar em R$ ${goal.toLocaleString('pt-BR')}. 
     
@@ -133,7 +135,7 @@ export const simulateDecision = async (query: string, balance: number, goal: num
     });
 
     return {
-      text: response.text || "O Mentor não conseguiu formular um parecer agora.",
+      text: (typeof response.text === 'function' ? response.text() : response.text) || "O Mentor não conseguiu formular um parecer agora.",
       sources: []
     };
   } catch (err) {
@@ -144,7 +146,7 @@ export const simulateDecision = async (query: string, balance: number, goal: num
 export const generateFinancialTips = async (transactions: Transaction[], balance: number, goal: number = 100000): Promise<Tip[]> => {
   try {
     const ai = getAI();
-    const model = "gemini-3-flash-preview";
+    const model = "gemini-2.0-flash";
     const prompt = `Analise estas transações: ${JSON.stringify(transactions.slice(0, 10))} e saldo de R$ ${balance.toFixed(2)}. 
     A meta do usuário é chegar em R$ ${goal.toLocaleString('pt-BR')}.
     Forneça 3 dicas práticas para acelerar a chegada a essa meta. 
@@ -170,7 +172,8 @@ export const generateFinancialTips = async (transactions: Transaction[], balance
       }
     });
 
-    return JSON.parse(response.text?.trim() || "[]");
+    const responseText = typeof response.text === 'function' ? response.text() : response.text;
+    return JSON.parse(responseText?.trim() || "[]");
   } catch (err) {
     return handleAIError(err);
   }
