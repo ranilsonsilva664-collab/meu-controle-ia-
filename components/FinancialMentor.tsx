@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { Transaction, MentorFeedback } from '../types';
-import { getMentorMentorship, simulateDecision } from '../geminiService';
+import { Transaction } from '../types';
+import { getMentorFeedback, getQuickAnswer, getWeeklyMissions, calculateMonthlySummary, Mission } from '../src/mentor';
 
 interface FinancialMentorProps {
   transactions: Transaction[];
@@ -11,93 +11,42 @@ interface FinancialMentorProps {
 }
 
 const FinancialMentor: React.FC<FinancialMentorProps> = ({ transactions, balance, userName, goal }) => {
-  const [mentorship, setMentorship] = useState<MentorFeedback | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
-  const [simulation, setSimulation] = useState<{ text: string; sources?: any[] } | null>(null);
-  const [simLoading, setSimLoading] = useState(false);
-  const [coolDown, setCoolDown] = useState(0);
-
-  // Timer para Cool Down
-  useEffect(() => {
-    if (coolDown > 0) {
-      const timer = setTimeout(() => setCoolDown(coolDown - 1), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [coolDown]);
+  const [mentorship, setMentorship] = useState<any>(null);
+  const [missions, setMissions] = useState<Mission[]>([]);
+  const [selectedFAQ, setSelectedFAQ] = useState<string | null>(null);
+  const [faqAnswer, setFaqAnswer] = useState<string>('');
+  const [isRefreshingMentorship, setIsRefreshingMentorship] = useState(false);
+  const [isRefreshingMissions, setIsRefreshingMissions] = useState(false);
 
   useEffect(() => {
-    // Tentar carregar do Cache primeiro silenciosamente
-    const cacheKey = `mentorship_${userName}_${transactions.length}_${balance.toFixed(0)}`;
-    const cachedData = localStorage.getItem(cacheKey);
-    if (cachedData) {
-      try {
-        const parsed = JSON.parse(cachedData);
-        // Only load if cache is still fresh (e.g., within 30 minutes)
-        const cacheAge = Date.now() - (parsed.timestamp || 0);
-        if (cacheAge < 1000 * 60 * 30) { // 30 min cache
-          setMentorship(parsed.data);
-        } else {
-          localStorage.removeItem(cacheKey); // Cache expired
-        }
-      } catch (e) {
-        localStorage.removeItem(cacheKey);
-      }
-    }
-  }, [userName, transactions.length, balance.toFixed(0)]);
+    // Carregar feedback do mentor (instantâneo)
+    const feedback = getMentorFeedback(transactions, balance, userName, goal);
+    setMentorship(feedback);
 
-  const fetchMentorship = async () => {
-    if (loading || coolDown > 0) return;
+    // Carregar missões semanais
+    const weeklyMissions = getWeeklyMissions(transactions);
+    setMissions(weeklyMissions);
+  }, [transactions, balance, userName, goal]);
 
-    setLoading(true);
-    setError(null);
-    try {
-      // Timeout de 15 segundos para evitar travamento eterno
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("O Mentor demorou muito para responder. Tente novamente.")), 15000)
-      );
-
-      const data = await Promise.race([
-        getMentorMentorship(transactions, balance, userName, goal),
-        timeoutPromise
-      ]) as MentorFeedback;
-
-      setMentorship(data);
-      const cacheKey = `mentor_cache_${transactions.length}_${balance.toFixed(0)}_${goal}`;
-      localStorage.setItem(cacheKey, JSON.stringify({ data, timestamp: Date.now() }));
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || "Erro ao carregar mentoria");
-      if (err.message?.includes("LIMITE_EXCEDIDO")) setCoolDown(90);
-    } finally {
-      setLoading(false);
-    }
+  const handleFAQClick = (question: string) => {
+    setSelectedFAQ(question);
+    const summary = calculateMonthlySummary(transactions);
+    const answer = getQuickAnswer(question, balance, { ...summary, balance }, goal);
+    setFaqAnswer(answer.text);
   };
 
-  // REMOVIDO: O gatilho automático foi removido para poupar a cota de uso (Erro 429)
-  // Agora a análise só acontece quando o usuário clica no botão "Gerar Análise Completa"
+  const refreshMentorship = () => {
+    setIsRefreshingMentorship(true);
+    const feedback = getMentorFeedback(transactions, balance, userName, goal);
+    setMentorship(feedback);
+    setTimeout(() => setIsRefreshingMentorship(false), 600);
+  };
 
-  const handleSimulate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!query.trim() || simLoading || coolDown > 0) return;
-
-    setSimLoading(true);
-    try {
-      const res = await simulateDecision(query, balance, goal);
-      setSimulation(res);
-      setQuery('');
-    } catch (err: any) {
-      console.error(err);
-      if (err.message?.includes("LIMITE_EXCEDIDO")) {
-        setCoolDown(60);
-      }
-      setSimulation({
-        text: `Aviso do Mentor: ${err.message || 'Erro desconhecido'}`
-      });
-    } finally {
-      setSimLoading(false);
-    }
+  const refreshMissions = () => {
+    setIsRefreshingMissions(true);
+    const weeklyMissions = getWeeklyMissions(transactions, true);
+    setMissions(weeklyMissions);
+    setTimeout(() => setIsRefreshingMissions(false), 600);
   };
 
   const stageColors = {
@@ -107,48 +56,48 @@ const FinancialMentor: React.FC<FinancialMentorProps> = ({ transactions, balance
     mestre: 'bg-amber-500'
   };
 
+  const faqQuestions = [
+    'Posso comprar algo de R$ 100?',
+    'Como economizar mais dinheiro?',
+    'Quando atingirei minha meta?',
+    'Como devo investir meu dinheiro?'
+  ];
+
   return (
     <div className="space-y-8 pb-20">
-      {/* SEÇÃO 1: CHAT COM O MENTOR (Sempre Visível) */}
+      {/* SEÇÃO 1: FAQ RÁPIDO */}
       <section className="space-y-4">
         <h3 className="text-lg font-bold text-slate-700 dark:text-slate-300 px-2 flex items-center gap-2 uppercase tracking-tighter">
-          <span>💬</span> Chat Direto com o Mentor
+          <span>💬</span> Perguntas Rápidas
         </h3>
         <div className="bg-slate-900 rounded-[2rem] p-6 text-white shadow-2xl relative overflow-hidden border border-slate-800">
           <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
             <span className="text-6xl">✨</span>
           </div>
-          <p className="text-slate-400 text-sm mb-6">Pergunte qualquer coisa sobre suas finanças, compras ou investimentos.</p>
+          <p className="text-slate-400 text-sm mb-6">Clique em uma pergunta para ver a resposta personalizada.</p>
 
-          <form onSubmit={handleSimulate} className="space-y-4">
-            <textarea
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Ex: Posso comprar uma pizza hoje sem quebrar meus 100k?"
-              className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white placeholder:text-white/20 focus:ring-2 focus:ring-emerald-500 outline-none resize-none transition-all h-24"
-            />
-            <button
-              disabled={simLoading || !query.trim() || coolDown > 0}
-              className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 text-slate-900 font-black py-4 rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-2"
-            >
-              {simLoading ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin"></div>
-                  Mentor está pensando...
-                </>
-              ) : coolDown > 0 ? (
-                <>⏳ Aguarde {coolDown}s (Limite Google)</>
-              ) : 'Enviar Pergunta ao Mentor'}
-            </button>
-          </form>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
+            {faqQuestions.map((q, idx) => (
+              <button
+                key={idx}
+                onClick={() => handleFAQClick(q)}
+                className={`p-4 rounded-xl text-left transition-all ${selectedFAQ === q
+                  ? 'bg-emerald-500 text-white'
+                  : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                  }`}
+              >
+                <span className="text-sm font-medium">{q}</span>
+              </button>
+            ))}
+          </div>
 
-          {simulation && (
+          {faqAnswer && (
             <div className="mt-6 p-5 bg-white/5 border border-white/10 rounded-2xl text-sm leading-relaxed animate-in fade-in slide-in-from-top-4 duration-500">
               <div className="text-emerald-400 font-black mb-2 flex items-center gap-2 uppercase text-[10px] tracking-widest">
-                <span>✨</span> Parecer do Mentor
+                <span>✨</span> Resposta do Mentor
               </div>
               <div className="prose prose-invert prose-sm">
-                {simulation.text.split('\n').map((line, i) => <p key={i} className="mb-2 text-slate-200">{line}</p>)}
+                {faqAnswer.split('\n').map((line, i) => <p key={i} className="mb-2 text-slate-200">{line}</p>)}
               </div>
             </div>
           )}
@@ -157,42 +106,90 @@ const FinancialMentor: React.FC<FinancialMentorProps> = ({ transactions, balance
 
       <hr className="border-slate-100 dark:border-slate-800" />
 
-      {/* SEÇÃO 2: ANÁLISE DE PERFIL (Condicional ou Manual) */}
+      {/* SEÇÃO 2: MISSÕES DA SEMANA */}
       <section className="space-y-4">
-        <h3 className="text-lg font-bold text-slate-700 dark:text-slate-300 px-2 flex items-center gap-2 uppercase tracking-tighter">
-          <span>🧙‍♂️</span> Análise Estratégica de Perfil
-        </h3>
+        <div className="flex items-center justify-between px-2">
+          <h3 className="text-lg font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2 uppercase tracking-tighter">
+            <span>🎯</span> Missões da Semana
+          </h3>
+          <button
+            onClick={refreshMissions}
+            className={`text-[10px] font-bold text-emerald-500 uppercase tracking-tighter hover:text-emerald-600 transition-all ${isRefreshingMissions ? 'animate-spin' : ''}`}
+            disabled={isRefreshingMissions}
+          >
+            🔄 {isRefreshingMissions ? 'Renovando...' : 'Renovar'}
+          </button>
+        </div>
 
-        {loading ? (
-          <div className="flex flex-col items-center justify-center p-12 animate-pulse bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-100 dark:border-slate-800">
-            <div className="text-6xl mb-4 text-emerald-500">🧠</div>
-            <p className="text-slate-500 dark:text-slate-400 font-bold text-center">O Mentor está analisando seu perfil...</p>
-          </div>
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center p-12 bg-white dark:bg-slate-900 rounded-[2rem] border border-red-100 dark:border-red-900/20 shadow-xl">
-            <div className="text-6xl mb-4">⚠️</div>
-            <p className="text-slate-500 dark:text-slate-400 text-center mb-6">{error}</p>
-            <button
-              onClick={fetchMentorship}
-              disabled={coolDown > 0}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white px-8 py-3 rounded-xl font-bold transition-all"
-            >
-              {coolDown > 0 ? `Liberando em ${coolDown}s...` : 'Tentar novamente'}
-            </button>
-          </div>
-        ) : !mentorship ? (
-          <div className="flex flex-col items-center justify-center p-12 bg-white dark:bg-slate-900 rounded-[2rem] border border-dashed border-slate-300 dark:border-slate-700 text-center">
-            <div className="text-4xl mb-4 opacity-30">📊</div>
-            <p className="text-slate-500 dark:text-slate-400 mb-6 text-sm">Clique abaixo para gerar uma análise profunda do seu estágio rumo aos 100k.</p>
-            <button
-              onClick={fetchMentorship}
-              disabled={coolDown > 0}
-              className="bg-slate-100 dark:bg-slate-800 hover:bg-emerald-500 hover:text-white text-slate-600 dark:text-slate-300 px-8 py-3 rounded-xl font-bold transition-all active:scale-95"
-            >
-              {coolDown > 0 ? `Aguarde ${coolDown}s...` : 'Gerar Análise Completa'}
-            </button>
+        {missions.length === 0 ? (
+          <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-[2rem] border border-dashed border-slate-300 dark:border-slate-700">
+            <div className="text-4xl mb-4 opacity-30">🎯</div>
+            <p className="text-slate-500 dark:text-slate-400 text-sm">Adicione transações para gerar missões personalizadas!</p>
           </div>
         ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {missions.map((mission) => (
+              <div
+                key={mission.id}
+                className={`p-6 rounded-2xl border transition-all ${mission.status === 'completed'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/30'
+                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+                  }`}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="text-2xl">
+                    {mission.status === 'completed' ? '✅' : mission.type === 'savings' ? '💰' : mission.type === 'reduction' ? '📉' : mission.type === 'tracking' ? '📊' : '🔍'}
+                  </div>
+                  <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-full ${mission.status === 'completed' ? 'bg-emerald-500 text-white' :
+                    mission.status === 'failed' ? 'bg-red-500 text-white' :
+                      'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                    }`}>
+                    {mission.status === 'completed' ? 'Completa' : mission.status === 'failed' ? 'Expirada' : 'Ativa'}
+                  </span>
+                </div>
+                <h4 className="font-bold text-slate-800 dark:text-slate-100 mb-2">{mission.title}</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">{mission.description}</p>
+
+                {/* Barra de progresso */}
+                <div className="relative pt-1">
+                  <div className="flex mb-2 items-center justify-between">
+                    <div>
+                      <span className="text-xs font-semibold inline-block text-emerald-600 dark:text-emerald-400">
+                        {mission.progress}%
+                      </span>
+                    </div>
+                  </div>
+                  <div className="overflow-hidden h-2 text-xs flex rounded-full bg-slate-200 dark:bg-slate-700">
+                    <div
+                      style={{ width: `${mission.progress}%` }}
+                      className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-emerald-500 transition-all duration-500"
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <hr className="border-slate-100 dark:border-slate-800" />
+
+      {/* SEÇÃO 3: ANÁLISE DE PERFIL */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between px-2">
+          <h3 className="text-lg font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2 uppercase tracking-tighter">
+            <span>🧙‍♂️</span> Análise de Perfil
+          </h3>
+          <button
+            onClick={refreshMentorship}
+            className={`text-[10px] font-bold text-emerald-500 uppercase tracking-tighter hover:text-emerald-600 transition-all ${isRefreshingMentorship ? 'animate-spin' : ''}`}
+            disabled={isRefreshingMentorship}
+          >
+            🔄 {isRefreshingMentorship ? 'Atualizando...' : 'Atualizar'}
+          </button>
+        </div>
+
+        {mentorship && (
           <div className="space-y-6">
             {/* Header Mentoria */}
             <div className="bg-white dark:bg-slate-900 rounded-[2rem] p-8 shadow-xl border border-slate-100 dark:border-slate-800 relative overflow-hidden">
@@ -206,9 +203,6 @@ const FinancialMentor: React.FC<FinancialMentorProps> = ({ transactions, balance
                     <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase text-white ${stageColors[mentorship.stage]}`}>
                       {mentorship.stage}
                     </span>
-                    <button onClick={fetchMentorship} disabled={coolDown > 0} className="text-[10px] font-bold text-emerald-500 uppercase tracking-tighter">
-                      {coolDown > 0 ? `${coolDown}s` : '🔄 Atualizar'}
-                    </button>
                   </div>
                   <h2 className="text-xl font-black text-slate-800 dark:text-white mb-4 leading-tight">
                     {mentorship.message}
@@ -224,15 +218,11 @@ const FinancialMentor: React.FC<FinancialMentorProps> = ({ transactions, balance
 
             {/* Insights */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {mentorship.insights.map((insight, idx) => (
+              {mentorship.insights.slice(0, 3).map((insight: any, idx: number) => (
                 <div key={idx} className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm hover:border-emerald-500 transition-all">
-                  <div className={`w-8 h-8 rounded-lg mb-3 flex items-center justify-center text-xs ${insight.impact === 'positive' ? 'bg-emerald-500/10 text-emerald-500' :
-                    insight.impact === 'negative' ? 'bg-red-500/10 text-red-500' : 'bg-amber-500/10 text-amber-500'
-                    }`}>
-                    {insight.impact === 'positive' ? '↑' : insight.impact === 'negative' ? '↓' : '→'}
-                  </div>
+                  <div className="text-3xl mb-3">{insight.icon}</div>
                   <h4 className="font-bold text-slate-800 dark:text-slate-100 mb-1 text-sm">{insight.title}</h4>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">{insight.detail}</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">{insight.body}</p>
                 </div>
               ))}
             </div>

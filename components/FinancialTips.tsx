@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Transaction, Tip } from '../types';
-import { generateFinancialTips } from '../geminiService';
+import { getFinancialTips } from '../src/mentor';
 
 interface FinancialTipsProps {
   transactions: Transaction[];
@@ -11,60 +11,23 @@ interface FinancialTipsProps {
 
 const FinancialTips: React.FC<FinancialTipsProps> = ({ transactions, balance, goal }) => {
   const [tips, setTips] = useState<Tip[]>([]);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const cacheKey = `financial_tips_${transactions.length}_${balance.toFixed(0)}_${goal}`;
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        if (Date.now() - parsed.timestamp < 1000 * 60 * 60) { // 1h cache
-          setTips(parsed.data);
-          return;
-        }
-      } catch (e) {
-        localStorage.removeItem(cacheKey);
-      }
-    }
-  }, [transactions.length, balance.toFixed(0), goal]);
+    // Gerar dicas instantaneamente (offline)
+    const offlineTips = getFinancialTips(transactions, balance, goal);
+    setTips(offlineTips);
+  }, [transactions, balance, goal]);
 
-  const fetchTips = async () => {
-    if (loading) return;
-    setLoading(true);
-    try {
-      const aiTips = await generateFinancialTips(transactions, balance, goal);
-      setTips(aiTips);
-      const cacheKey = `financial_tips_${transactions.length}_${balance.toFixed(0)}_${goal}`;
-      localStorage.setItem(cacheKey, JSON.stringify({ data: aiTips, timestamp: Date.now() }));
-    } catch (err: any) {
-      console.error(err);
-      alert(err.message || "Erro ao gerar dicas");
-    } finally {
-      setLoading(false);
-    }
+  const refreshTips = () => {
+    const offlineTips = getFinancialTips(transactions, balance, goal);
+    setTips(offlineTips);
   };
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center p-12 bg-white dark:bg-slate-900 rounded-2xl border border-emerald-100 dark:border-emerald-900/30">
-        <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-emerald-600 dark:text-emerald-400 font-medium text-sm">O Mentor está processando novos insights...</p>
-      </div>
-    );
-  }
-
-  if (tips.length === 0 && !loading) {
+  if (tips.length === 0) {
     return (
       <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-[2rem] border border-dashed border-slate-300 dark:border-slate-700 text-slate-400 dark:text-slate-600">
         <div className="text-4xl mb-4 opacity-30">💡</div>
-        <p className="font-bold text-sm mb-6 text-slate-500">O Mentor tem dicas exclusivas para acelerar seus 100k.</p>
-        <button
-          onClick={fetchTips}
-          className="bg-emerald-500 hover:bg-emerald-600 text-white px-8 py-3 rounded-xl font-bold transition-all active:scale-95 text-sm"
-        >
-          Gerar Dicas Estratégicas
-        </button>
+        <p className="font-bold text-sm mb-6 text-slate-500">Adicione transações para receber dicas personalizadas.</p>
       </div>
     );
   }
@@ -73,11 +36,10 @@ const FinancialTips: React.FC<FinancialTipsProps> = ({ transactions, balance, go
     <div className="space-y-6">
       <div className="flex justify-end px-2">
         <button
-          onClick={fetchTips}
-          disabled={loading}
+          onClick={refreshTips}
           className="text-[10px] font-bold text-emerald-500 uppercase tracking-tighter hover:text-emerald-600"
         >
-          {loading ? 'Refazendo...' : '🔄 Atualizar Estratégia'}
+          🔄 Atualizar Estratégia
         </button>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

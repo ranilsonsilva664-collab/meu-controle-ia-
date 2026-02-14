@@ -29,6 +29,7 @@ export interface Transaction {
   date: string;
   category: Category;
   type: TransactionType;
+  receipt_url?: string;
 }
 
 export interface FinancialStats {
